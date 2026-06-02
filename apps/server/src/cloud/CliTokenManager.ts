@@ -22,6 +22,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import { bytesToString, stringToBytes } from "./encoding.ts";
 import { relayUrlConfig } from "./publicConfig.ts";
 
 const CLOUD_CLI_OAUTH_TOKEN_SECRET = "cloud-cli-oauth-token";
@@ -75,15 +76,6 @@ const wrapError =
           }),
       ),
     );
-
-function stringToBytes(value: string): Uint8Array {
-  return new TextEncoder().encode(value);
-}
-
-function bytesToString(value: Uint8Array): string {
-  return new TextDecoder().decode(value);
-}
-
 const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const httpClient = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);

@@ -23,6 +23,7 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as CliState from "../cloud/CliState.ts";
 import * as CliTokenManager from "../cloud/CliTokenManager.ts";
 import { CLOUD_LINKED_USER_ID, RELAY_URL_SECRET } from "../cloud/config.ts";
+import { bytesToString } from "../cloud/encoding.ts";
 import { relayUrlConfig } from "../cloud/publicConfig.ts";
 import { ServerConfig } from "../config.ts";
 import { ServerEnvironmentLive } from "../environment/Layers/ServerEnvironment.ts";
@@ -34,11 +35,6 @@ const jsonFlag = Flag.boolean("json").pipe(
   Flag.withDescription("Emit JSON instead of human-readable output."),
   Flag.withDefault(false),
 );
-
-function bytesToString(value: Uint8Array): string {
-  return new TextDecoder().decode(value);
-}
-
 interface CloudCliStatus {
   readonly desired: boolean;
   readonly authenticated: boolean;

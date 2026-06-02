@@ -13,10 +13,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { CLOUD_ENDPOINT_RUNTIME_CONFIG, decodeRuntimeConfig } from "./config.ts";
-
-function bytesToString(bytes: Uint8Array): string {
-  return new TextDecoder().decode(bytes);
-}
+import { bytesToString } from "./encoding.ts";
 
 const readRuntimeConfig = Effect.gen(function* () {
   const secrets = yield* ServerSecretStore.ServerSecretStore;

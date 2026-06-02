@@ -74,6 +74,7 @@ import {
 import { relayUrlConfig } from "./publicConfig.ts";
 import * as CliState from "./CliState.ts";
 import * as CliTokenManager from "./CliTokenManager.ts";
+import { bytesToString, stringToBytes } from "./encoding.ts";
 import { getOrCreateEnvironmentKeyPairFromSecretStore } from "./environmentKeys.ts";
 
 const CLOUD_MINT_NONCE_PREFIX = "cloud-mint-nonce-";
@@ -108,14 +109,6 @@ const requireRelayUrl = relayUrlConfig.pipe(
       }),
   ),
 );
-
-function bytesToString(bytes: Uint8Array): string {
-  return new TextDecoder().decode(bytes);
-}
-
-function stringToBytes(value: string): Uint8Array {
-  return new TextEncoder().encode(value);
-}
 
 export function consumeCloudReplayGuards(input: {
   readonly secrets: ServerSecretStore.ServerSecretStoreShape;
@@ -541,7 +534,9 @@ const reconcileDesiredCloudLinkWith = Effect.fn("environment.cloud.reconcileDesi
         message: "Could not resolve local environment origin.",
       });
     }
-    const localWsOrigin = localOrigin.replace(/^http/u, "ws");
+    const localWsOrigin = localOrigin
+      .replace(/^https:\/\//u, "wss://")
+      .replace(/^http:\/\//u, "ws://");
     const token = yield* dependencies.cliTokenManager.getExisting.pipe(
       Effect.flatMap(
         Option.match({

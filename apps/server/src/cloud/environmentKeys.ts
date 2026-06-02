@@ -2,17 +2,10 @@ import * as NodeCrypto from "node:crypto";
 import * as Effect from "effect/Effect";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import { bytesToString, stringToBytes } from "./encoding.ts";
 
 const CLOUD_LINK_PRIVATE_KEY = "cloud-link-ed25519-private-key";
 const CLOUD_LINK_PUBLIC_KEY = "cloud-link-ed25519-public-key";
-
-function bytesToString(bytes: Uint8Array): string {
-  return new TextDecoder().decode(bytes);
-}
-
-function stringToBytes(value: string): Uint8Array {
-  return new TextEncoder().encode(value);
-}
 
 export const getOrCreateEnvironmentKeyPairFromSecretStore = Effect.fn(function* (
   secrets: ServerSecretStore.ServerSecretStoreShape,
