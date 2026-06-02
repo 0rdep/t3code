@@ -17,6 +17,14 @@ export interface RelayConfigurationShape {
   readonly relayIssuer: string;
   readonly apns: ApnsCredentials;
   readonly clerkSecretKey: Redacted.Redacted<string>;
+  readonly clerkPublishableKey: string;
+  readonly clerkCliOAuth: {
+    readonly authorizationEndpoint: string;
+    readonly tokenEndpoint: string;
+    readonly clientId: string;
+    readonly redirectUri: string;
+    readonly scopes: ReadonlyArray<string>;
+  };
   readonly apnsDeliveryJobSigningSecret: Redacted.Redacted<string>;
   readonly cloudMintPrivateKey: Redacted.Redacted<string>;
   readonly cloudMintPublicKey: string;

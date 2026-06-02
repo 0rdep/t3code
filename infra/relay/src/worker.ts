@@ -12,6 +12,10 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 
 import { RelayApi } from "@t3tools/contracts/relay";
+import {
+  clerkFrontendApiUrlFromPublishableKey,
+  DEFAULT_T3_CLERK_PUBLISHABLE_KEY,
+} from "@t3tools/shared/relayAuth";
 
 import {
   clientApi,
@@ -129,6 +133,11 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const axiomTracesEndpoint = yield* observability.traces.otelTracesEndpoint;
 
     const clerkSecretKey = yield* Config.redacted("CLERK_SECRET_KEY");
+    const clerkPublishableKey = yield* Config.string("T3CODE_CLERK_PUBLISHABLE_KEY").pipe(
+      Config.withDefault(DEFAULT_T3_CLERK_PUBLISHABLE_KEY),
+    );
+    const clerkFrontendApiUrl = clerkFrontendApiUrlFromPublishableKey(clerkPublishableKey);
+    const clerkCliOAuthClientId = yield* Config.string("CLERK_CLI_OAUTH_CLIENT_ID");
 
     const cloudMintPrivateKey = yield* cloudMintKeyPair.privateKey;
     const cloudMintPublicKey = yield* cloudMintKeyPair.publicKey;
@@ -156,6 +165,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
         },
         apnsDeliveryJobSigningSecret: yield* apnsDeliveryJobSigningSecret,
         clerkSecretKey,
+        clerkPublishableKey,
+        clerkCliOAuth: {
+          authorizationEndpoint: `${clerkFrontendApiUrl}/oauth/authorize`,
+          tokenEndpoint: `${clerkFrontendApiUrl}/oauth/token`,
+          clientId: clerkCliOAuthClientId,
+          redirectUri: "http://127.0.0.1:34338/callback",
+          scopes: ["openid", "profile", "email"],
+        },
         cloudMintPrivateKey: yield* cloudMintPrivateKey,
         cloudMintPublicKey: yield* cloudMintPublicKey,
         managedEndpointBaseDomain: yield* managedEndpointZoneName,
