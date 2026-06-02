@@ -277,6 +277,12 @@ const cloudLinkCommand = Command.make("link", {
       Effect.gen(function* () {
         const cloudflared = yield* Cloudflared.CloudflaredExecutable;
         const executable = yield* cloudflared.resolve;
+        if (executable.status === "unsupported") {
+          return yield* new Cloudflared.CloudflaredInstallError({
+            reason: "unsupported_platform",
+            message: `T3 Code does not support cloudflared on ${executable.platform}-${executable.arch}. Install cloudflared manually and set ${Cloudflared.CLOUDFLARED_PATH_ENV_NAME} to its path.`,
+          });
+        }
         const installed =
           executable.status === "available" ? executable : yield* cloudflared.install;
         yield* Console.log(
