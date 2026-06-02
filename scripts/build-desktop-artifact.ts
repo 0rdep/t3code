@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parse as parseYaml } from "yaml";
 import rootPackageJson from "../package.json" with { type: "json" };
 import desktopPackageJson from "../apps/desktop/package.json" with { type: "json" };
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
@@ -26,10 +27,23 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
 const BuildArch = Schema.Literals(["arm64", "x64", "universal"]);
 
+interface WorkspaceConfig {
+  readonly catalog?: Record<string, string>;
+  readonly overrides?: Record<string, string>;
+}
+
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("..", import.meta.url))),
 );
 const encodeJsonString = Schema.encodeEffect(Schema.UnknownFromJsonString);
+
+const readWorkspaceConfig = Effect.fn("readWorkspaceConfig")(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const repoRoot = yield* RepoRoot;
+  const workspaceYaml = yield* fs.readFileString(path.join(repoRoot, "pnpm-workspace.yaml"));
+  return parseYaml(workspaceYaml) as WorkspaceConfig;
+});
 
 interface DesktopBuildIconAssets {
   readonly macIconPng: string;
@@ -212,6 +226,7 @@ interface StagePackageJson {
   readonly buildVersion: string;
   readonly t3codeCommitHash: string;
   readonly private: true;
+  readonly packageManager: string;
   readonly description: string;
   readonly author: string;
   readonly main: string;
@@ -654,6 +669,9 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const repoRoot = yield* RepoRoot;
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
+  const workspaceConfig = yield* readWorkspaceConfig();
+  const workspaceCatalog = workspaceConfig.catalog ?? {};
+  const workspaceOverrides = workspaceConfig.overrides ?? {};
 
   const platformConfig = PLATFORM_CONFIG[options.platform];
   if (!platformConfig) {
@@ -672,12 +690,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   }
 
   const resolvedOverrides = yield* Effect.try({
-    try: () =>
-      resolveCatalogDependencies(
-        rootPackageJson.overrides,
-        rootPackageJson.workspaces.catalog,
-        "apps/desktop",
-      ),
+    try: () => resolveCatalogDependencies(workspaceOverrides, workspaceCatalog, "apps/desktop"),
     catch: (cause) =>
       new BuildScriptError({
         message: "Could not resolve overrides from package.json.",
@@ -686,12 +699,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   });
 
   const resolvedServerDependencies = yield* Effect.try({
-    try: () =>
-      resolveCatalogDependencies(
-        serverDependencies,
-        rootPackageJson.workspaces.catalog,
-        "apps/server",
-      ),
+    try: () => resolveCatalogDependencies(serverDependencies, workspaceCatalog, "apps/server"),
     catch: (cause) =>
       new BuildScriptError({
         message: "Could not resolve production dependencies from apps/server/package.json.",
@@ -699,11 +707,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       }),
   });
   const resolvedDesktopRuntimeDependencies = yield* Effect.try({
-    try: () =>
-      resolveDesktopRuntimeDependencies(
-        desktopPackageJson.dependencies,
-        rootPackageJson.workspaces.catalog,
-      ),
+    try: () => resolveDesktopRuntimeDependencies(desktopPackageJson.dependencies, workspaceCatalog),
     catch: (cause) =>
       new BuildScriptError({
         message: "Could not resolve desktop runtime dependencies from apps/desktop/package.json.",
@@ -734,23 +738,23 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       ChildProcess.make({
         cwd: repoRoot,
         ...commandOutputOptions(options.verbose),
-        // Windows needs shell mode to resolve .cmd shims (e.g. bun.cmd).
+        // Windows needs shell mode to resolve .cmd shims (e.g. vp.cmd).
         shell: process.platform === "win32",
-      })`bun run build:desktop`,
+      })`vp run build:desktop`,
     );
   }
 
   for (const [label, dir] of Object.entries(distDirs)) {
     if (!(yield* fs.exists(dir))) {
       return yield* new BuildScriptError({
-        message: `Missing ${label} at ${dir}. Run 'bun run build:desktop' first.`,
+        message: `Missing ${label} at ${dir}. Run 'vp run build:desktop' first.`,
       });
     }
   }
 
   if (!(yield* fs.exists(bundledClientEntry))) {
     return yield* new BuildScriptError({
-      message: `Missing bundled server client at ${bundledClientEntry}. Run 'bun run build:desktop' first.`,
+      message: `Missing bundled server client at ${bundledClientEntry}. Run 'vp run build:desktop' first.`,
     });
   }
 
@@ -784,6 +788,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
     private: true,
+    packageManager: rootPackageJson.packageManager,
     description: "T3 Code desktop build",
     author: "T3 Tools",
     main: "apps/desktop/dist-electron/main.cjs",
@@ -813,9 +818,9 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     ChildProcess.make({
       cwd: stageAppDir,
       ...commandOutputOptions(options.verbose),
-      // Windows needs shell mode to resolve .cmd shims (e.g. bun.cmd).
+      // Windows needs shell mode to resolve .cmd shims (e.g. vp.cmd).
       shell: process.platform === "win32",
-    })`bun install --production --omit optional`,
+    })`vp install --prod --no-optional`,
   );
 
   const buildEnv: NodeJS.ProcessEnv = {
@@ -855,7 +860,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       ...commandOutputOptions(options.verbose),
       // Windows needs shell mode to resolve .cmd shims.
       shell: process.platform === "win32",
-    })`bun x --install=fallback electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`,
+    })`vp dlx electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`,
   );
 
   const stageDistDir = path.join(stageAppDir, "dist");
@@ -915,7 +920,7 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   ),
   skipBuild: Flag.boolean("skip-build").pipe(
     Flag.withDescription(
-      "Skip `bun run build:desktop` and use existing dist artifacts (env: T3CODE_DESKTOP_SKIP_BUILD).",
+      "Skip `vp run build:desktop` and use existing dist artifacts (env: T3CODE_DESKTOP_SKIP_BUILD).",
     ),
     Flag.optional,
   ),
