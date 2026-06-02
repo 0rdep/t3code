@@ -231,6 +231,16 @@ const publishCmd = Command.make(
           const workspaceConfig = yield* readWorkspaceConfig();
           const workspaceCatalog = workspaceConfig.catalog ?? {};
           const workspaceOverrides = workspaceConfig.overrides ?? {};
+          const resolvedOverrides = resolveCatalogDependencies(
+            workspaceOverrides,
+            workspaceCatalog,
+            "apps/server",
+          );
+          // Filter out internal workspace aliases (npm: protocol redirections
+          // like vite→vite-plus) that are irrelevant to published consumers.
+          const publishOverrides = Object.fromEntries(
+            Object.entries(resolvedOverrides).filter(([, v]) => !v.startsWith("npm:")),
+          );
           const pkg: PackageJson = {
             name: serverPackageJson.name,
             repository: serverPackageJson.repository,
@@ -244,11 +254,7 @@ const publishCmd = Command.make(
               workspaceCatalog,
               "apps/server",
             ),
-            overrides: resolveCatalogDependencies(
-              workspaceOverrides,
-              workspaceCatalog,
-              "apps/server",
-            ),
+            overrides: publishOverrides,
           };
 
           const original = yield* fs.readFileString(packageJsonPath);
