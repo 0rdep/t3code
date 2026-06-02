@@ -70,16 +70,15 @@ const makeMockAgentWrapper = Effect.fn("makeMockAgentWrapper")(function* (
     prefix: "cursor-provider-mock-",
   });
   const wrapperPath = path.join(dir, "fake-agent.sh");
-  // @effect-diagnostics-next-line preferSchemaOverJson:off
-  const bunCommand = JSON.stringify("bun");
-  // @effect-diagnostics-next-line preferSchemaOverJson:off
-  const mockAgentPathJson = JSON.stringify(mockAgentPath);
+  const mockAgentCommand = ["node", "--experimental-strip-types", mockAgentPath]
+    .map((arg) => JSON.stringify(arg))
+    .join(" ");
   const envExports = Object.entries(extraEnv ?? {})
     .map(([key, value]) => `export ${key}=${JSON.stringify(value)}`)
     .join("\n");
   const script = `#!/bin/sh
 ${envExports}
-exec ${bunCommand} ${mockAgentPathJson} "$@"
+exec ${mockAgentCommand} "$@"
 `;
   yield* fileSystem.writeFileString(wrapperPath, script);
   yield* fileSystem.chmod(wrapperPath, 0o755);
@@ -95,17 +94,16 @@ const makeMockAgentWithAboutWrapper = Effect.fn("makeMockAgentWithAboutWrapper")
     prefix: "cursor-provider-about-mock-",
   });
   const wrapperPath = path.join(dir, "fake-agent.sh");
-  // @effect-diagnostics-next-line preferSchemaOverJson:off
-  const bunCommand = JSON.stringify("bun");
-  // @effect-diagnostics-next-line preferSchemaOverJson:off
-  const mockAgentPathJson = JSON.stringify(mockAgentPath);
+  const mockAgentCommand = ["node", "--experimental-strip-types", mockAgentPath]
+    .map((arg) => JSON.stringify(arg))
+    .join(" ");
   const script = `#!/bin/sh
 if [ "$1" = "about" ]; then
   printf 'CLI Version         2026.04.09-f2b0fcd\\n'
   printf 'User Email          cursor@example.com\\n'
   exit 0
 fi
-exec ${bunCommand} ${mockAgentPathJson} "$@"
+exec ${mockAgentCommand} "$@"
 `;
   yield* fileSystem.writeFileString(wrapperPath, script);
   yield* fileSystem.chmod(wrapperPath, 0o755);
