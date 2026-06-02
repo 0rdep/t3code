@@ -731,6 +731,15 @@ export const RelayHealthResponse = Schema.Struct({
 });
 export type RelayHealthResponse = typeof RelayHealthResponse.Type;
 
+export const RelayCliOAuthMetadata = Schema.Struct({
+  authorizationEndpoint: TrimmedNonEmptyString,
+  tokenEndpoint: TrimmedNonEmptyString,
+  clientId: TrimmedNonEmptyString,
+  redirectUri: TrimmedNonEmptyString,
+  scopes: Schema.Array(TrimmedNonEmptyString),
+});
+export type RelayCliOAuthMetadata = typeof RelayCliOAuthMetadata.Type;
+
 export const RelayHealthGroup = HttpApiGroup.make("health").add(
   HttpApiEndpoint.get("health", "/health", {
     success: RelayHealthResponse,
@@ -744,6 +753,9 @@ export const RelayMetadataGroup = HttpApiGroup.make("metadata").add(
   }),
   HttpApiEndpoint.get("protectedResource", "/.well-known/oauth-protected-resource", {
     success: RelayProtectedResourceMetadata,
+  }),
+  HttpApiEndpoint.get("cliOAuth", "/.well-known/t3-cloud-cli", {
+    success: RelayCliOAuthMetadata,
   }),
 );
 
