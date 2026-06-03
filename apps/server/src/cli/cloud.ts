@@ -152,7 +152,10 @@ export const acquireRelayClientForLink = Effect.fn("cloud.cli.acquire_relay_clie
       return Option.some(executable);
     }
     if (executable.status === "unsupported") {
-      return Option.some(yield* relayClient.installWithProgress(reportProgress));
+      yield* Console.log(
+        `T3 Code does not provide a managed relay client binary for ${executable.platform}-${executable.arch}.`,
+      );
+      return Option.none();
     }
     if (!(yield* confirmInstall(executable.version))) {
       return Option.none();
