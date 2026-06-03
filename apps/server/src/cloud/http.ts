@@ -594,6 +594,11 @@ const reconcileDesiredCloudLinkWith = Effect.fn("environment.cloud.reconcileDesi
       },
       schema: RelayEnvironmentLinkResponse,
     });
+    if (!(yield* CliState.readCliDesiredCloudLink)) {
+      return yield* Effect.logInfo(
+        "Aborting cloud link reconciliation: desired link was cleared while in flight",
+      );
+    }
     yield* CliState.setCliDesiredCloudLink(true);
     return yield* applyCloudRelayConfig(dependencies, {
       relayUrl,
