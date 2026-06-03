@@ -185,19 +185,19 @@ const disconnectCloud = Effect.fn("cloud.cli.disconnect")(function* (options: {
   yield* CliState.setCliDesiredCloudLink(false);
   const liveResult = yield* runLiveCloudUnlink();
   const relayResult = yield* Effect.exit(unlinkRelayEnvironment());
-  yield* CliState.clearPersistedCloudLink;
-
-  if (options.clearAuthorization) {
-    const tokens = yield* CliTokenManager.CloudCliTokenManager;
-    yield* tokens.clear;
-  }
 
   if (liveResult.status === "failed") {
     yield* Console.warn(
       `T3 Cloud exposure is disabled, but the running server could not stop its tunnel: ${String(liveResult.cause)}\nRestart that server to stop the connector.`,
     );
   } else {
+    yield* CliState.clearPersistedCloudLink;
     yield* Console.log("T3 Cloud exposure is disabled locally.");
+  }
+
+  if (options.clearAuthorization) {
+    const tokens = yield* CliTokenManager.CloudCliTokenManager;
+    yield* tokens.clear;
   }
 
   if (Exit.isFailure(relayResult)) {
