@@ -21,6 +21,7 @@ export {
   listServerPairingLinks,
   peekPairingTokenFromUrl,
   resolveInitialServerAuthGateState,
+  resolvePrimaryWebSocketConnectionUrl,
   revokeOtherServerClientSessions,
   revokeServerClientSession,
   revokeServerPairingLink,

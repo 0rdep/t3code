@@ -120,10 +120,9 @@ export interface EnvironmentAuthShape {
   readonly issuePairingCredential: (
     input?: AuthCreatePairingCredentialInput,
   ) => Effect.Effect<AuthPairingCredentialResult, ServerAuthInternalError>;
-  readonly issueStartupPairingCredential: () => Effect.Effect<
-    AuthPairingCredentialResult,
-    ServerAuthInternalError
-  >;
+  readonly issueStartupPairingCredential: (input?: {
+    readonly ttl?: Duration.Duration;
+  }) => Effect.Effect<AuthPairingCredentialResult, ServerAuthInternalError>;
   readonly listPairingLinks: (input?: {
     readonly excludeSubjects?: ReadonlyArray<string>;
   }) => Effect.Effect<ReadonlyArray<AuthPairingLink>, ServerAuthInternalError>;
@@ -171,6 +170,7 @@ export interface EnvironmentAuthShape {
   ) => Effect.Effect<AuthWebSocketTicketResult, ServerAuthInternalError>;
   readonly issueStartupPairingUrl: (
     baseUrl: string,
+    input?: { readonly ttl?: Duration.Duration },
   ) => Effect.Effect<string, ServerAuthInternalError>;
 }
 
@@ -407,11 +407,13 @@ export const make = Effect.fn("makeEnvironmentAuth")(function* () {
     readonly scopes: ReadonlyArray<AuthEnvironmentScope>;
     readonly subject: string;
     readonly label?: string;
+    readonly ttl?: Duration.Duration;
   }) =>
     createPairingLink({
       scopes: input.scopes,
       subject: input.subject,
       ...(input.label ? { label: input.label } : {}),
+      ...(input.ttl ? { ttl: input.ttl } : {}),
     }).pipe(
       Effect.map(
         (issued) =>
@@ -533,10 +535,13 @@ export const make = Effect.fn("makeEnvironmentAuth")(function* () {
       ...(input?.label ? { label: input.label } : {}),
     }).pipe(Effect.withSpan("EnvironmentAuth.issuePairingCredential"));
 
-  const issueStartupPairingCredential: EnvironmentAuthShape["issueStartupPairingCredential"] = () =>
+  const issueStartupPairingCredential: EnvironmentAuthShape["issueStartupPairingCredential"] = (
+    input,
+  ) =>
     issuePairingCredentialForSubject({
       scopes: AuthAdministrativeScopes,
       subject: INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT,
+      ...(input?.ttl ? { ttl: input.ttl } : {}),
     }).pipe(Effect.withSpan("EnvironmentAuth.issueStartupPairingCredential"));
 
   const listClientSessions: EnvironmentAuthShape["listClientSessions"] = (currentSessionId) =>
@@ -570,8 +575,8 @@ export const make = Effect.fn("makeEnvironmentAuth")(function* () {
       Effect.withSpan("EnvironmentAuth.revokeOtherClientSessions"),
     );
 
-  const issueStartupPairingUrl: EnvironmentAuthShape["issueStartupPairingUrl"] = (baseUrl) =>
-    issueStartupPairingCredential().pipe(
+  const issueStartupPairingUrl: EnvironmentAuthShape["issueStartupPairingUrl"] = (baseUrl, input) =>
+    issueStartupPairingCredential(input).pipe(
       Effect.map((issued) => {
         const url = new URL(baseUrl);
         url.pathname = "/pair";

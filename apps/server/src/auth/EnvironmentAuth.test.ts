@@ -1,8 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AuthAdministrativeScopes } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 
 import type { ServerConfigShape } from "../config.ts";
 import { ServerConfig } from "../config.ts";
@@ -185,6 +187,26 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
       ]);
       expect(verified.subject).toBe("administrative-bootstrap");
     }).pipe(Effect.provide(makeEnvironmentAuthLayer())),
+  );
+
+  it.effect("supports longer startup pairing URL TTLs for local browser startup", () =>
+    Effect.gen(function* () {
+      const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+
+      const pairingUrl = yield* serverAuth.issueStartupPairingUrl("http://127.0.0.1:3773", {
+        ttl: Duration.minutes(10),
+      });
+      const token = new URLSearchParams(new URL(pairingUrl).hash.slice(1)).get("token");
+
+      yield* TestClock.adjust(Duration.minutes(6));
+
+      const exchanged = yield* serverAuth.createBrowserSession(token ?? "", requestMetadata);
+      const verified = yield* serverAuth.authenticateHttpRequest(
+        makeCookieRequest(exchanged.sessionToken),
+      );
+
+      expect(verified.subject).toBe("administrative-bootstrap");
+    }).pipe(Effect.provide(Layer.merge(makeEnvironmentAuthLayer(), TestClock.layer()))),
   );
 
   it.effect(

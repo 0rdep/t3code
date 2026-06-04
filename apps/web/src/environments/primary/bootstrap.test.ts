@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EnvironmentId, type ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 
 import {
   getPrimaryKnownEnvironment,
   resolvePrimaryEnvironmentHttpUrl,
   resolveInitialPrimaryEnvironmentDescriptor,
+  resolvePrimaryWebSocketConnectionUrl,
   resetPrimaryEnvironmentDescriptorForTests,
   writePrimaryEnvironmentDescriptor,
 } from ".";
@@ -174,5 +176,20 @@ describe("environmentBootstrap", () => {
     expect(resolvePrimaryEnvironmentHttpUrl("/.well-known/t3/environment")).toBe(
       "http://127.0.0.1:5733/.well-known/t3/environment",
     );
+  });
+
+  it("mints a fresh ticket for primary websocket connection urls", async () => {
+    const testApi = await installEnvironmentHttpTest({
+      webSocketTicket: () =>
+        Effect.succeed({
+          ticket: "fresh-ws-ticket",
+          expiresAt: DateTime.makeUnsafe("2026-05-01T12:05:00.000Z"),
+        }),
+    });
+
+    await expect(resolvePrimaryWebSocketConnectionUrl("ws://localhost:3773/")).resolves.toBe(
+      "ws://localhost:3773/ws?wsTicket=fresh-ws-ticket",
+    );
+    expect(testApi.calls.webSocketTicket).toBe(1);
   });
 });

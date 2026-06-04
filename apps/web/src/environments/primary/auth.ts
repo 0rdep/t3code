@@ -5,6 +5,7 @@ import type {
   AuthPairingCredentialResult,
   AuthSessionId,
   AuthSessionState,
+  AuthWebSocketTicketResult,
 } from "@t3tools/contracts";
 import { EnvironmentHttpCommonError } from "@t3tools/contracts";
 import type { EnvironmentHttpCommonError as EnvironmentHttpCommonErrorType } from "@t3tools/contracts";
@@ -190,6 +191,34 @@ async function exchangeBootstrapCredential(credential: string): Promise<AuthBrow
       });
     }
   });
+}
+
+async function issuePrimaryWebSocketTicket(): Promise<AuthWebSocketTicketResult> {
+  return retryTransientBootstrap(async () => {
+    try {
+      return await runPrimaryHttp(
+        PrimaryEnvironmentHttpClient.pipe(
+          Effect.flatMap((client) => client.auth.webSocketTicket({ headers: {} })),
+        ),
+      );
+    } catch (error) {
+      const status = readHttpApiStatus(error) ?? 500;
+      throw new BootstrapHttpError({
+        message: readHttpApiErrorMessage(error, `Failed to issue WebSocket ticket (${status}).`),
+        status,
+      });
+    }
+  });
+}
+
+export async function resolvePrimaryWebSocketConnectionUrl(wsBaseUrl: string): Promise<string> {
+  const issued = await issuePrimaryWebSocketTicket();
+  const url = new URL(wsBaseUrl, window.location.origin);
+  if (url.pathname === "" || url.pathname === "/") {
+    url.pathname = "/ws";
+  }
+  url.searchParams.set("wsTicket", issued.ticket);
+  return url.toString();
 }
 
 async function waitForAuthenticatedSessionAfterBootstrap(): Promise<AuthSessionState> {

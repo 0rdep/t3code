@@ -9,6 +9,7 @@ import {
 } from "@t3tools/contracts";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -37,6 +38,7 @@ import { ProviderSessionReaper } from "./provider/Services/ProviderSessionReaper
 import {
   formatHeadlessServeOutput,
   formatHostForUrl,
+  isLoopbackHost,
   isWildcardHost,
   issueHeadlessServeAccessInfo,
 } from "./startupAccess.ts";
@@ -58,6 +60,8 @@ export class ServerRuntimeStartup extends Context.Service<
   ServerRuntimeStartup,
   ServerRuntimeStartupShape
 >()("t3/serverRuntimeStartup") {}
+
+const LOCAL_STARTUP_PAIRING_TTL = Duration.hours(12);
 
 interface QueuedCommand {
   readonly run: Effect.Effect<void, never>;
@@ -253,7 +257,12 @@ const resolveStartupBrowserTarget = Effect.gen(function* () {
   const baseTarget = serverConfig.devUrl?.toString() ?? bindUrl;
   return yield* Effect.succeed(serverConfig.mode === "desktop" ? baseTarget : undefined).pipe(
     Effect.flatMap((target) =>
-      target ? Effect.succeed(target) : serverAuth.issueStartupPairingUrl(baseTarget),
+      target
+        ? Effect.succeed(target)
+        : serverAuth.issueStartupPairingUrl(
+            baseTarget,
+            isLoopbackHost(serverConfig.host) ? { ttl: LOCAL_STARTUP_PAIRING_TTL } : undefined,
+          ),
     ),
   );
 });
