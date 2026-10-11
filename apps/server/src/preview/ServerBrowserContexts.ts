@@ -79,7 +79,7 @@ export const presentAsChrome = async (
   if (identity) await cdp.send("Emulation.setUserAgentOverride", identity);
 };
 
-/** Persistent human profiles keep their storage; isolated agents share a browser, never a context. */
+/** Persistent profiles share saved logins; explicitly isolated tabs never share a context. */
 export class ServerBrowserContexts {
   private readonly options: Options;
   private readonly contexts = new Map<string, Promise<BrowserContext>>();

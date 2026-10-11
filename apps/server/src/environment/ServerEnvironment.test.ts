@@ -303,6 +303,7 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
       expect(withFd.capabilities.serverUpdateThreadContinuation).toBeUndefined();
 
       const withoutFd = yield* describeWith({ mode: "desktop" });
+      expect(withoutFd.capabilities.desktopBrowser).toBe(false);
       expect(withoutFd.capabilities.serverSelfUpdate).toBe("desktop-managed");
       expect(withoutFd.capabilities.desktopAppUpdate).toBeUndefined();
       expect(withoutFd.capabilities.serverSelfUpdateProgress).toBeUndefined();
@@ -310,6 +311,15 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
 
       const web = yield* describeWith({ mode: "web", desktopTelemetryControlFd: 5 });
       expect(web.capabilities.desktopAppUpdate).toBeUndefined();
+
+      const browser = yield* describeWith({
+        mode: "desktop",
+        desktopBrowserFd: 6,
+        desktopBrowserControlFd: 7,
+      });
+      expect(browser.capabilities.desktopBrowser).toBe(true);
+      const partialBrowser = yield* describeWith({ mode: "desktop", desktopBrowserFd: 6 });
+      expect(partialBrowser.capabilities.desktopBrowser).toBe(false);
     }),
   );
 

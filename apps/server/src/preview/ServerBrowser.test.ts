@@ -1539,11 +1539,54 @@ it.live(
     ).pipe(Effect.provide(layer)),
 );
 
-it.live("an agent tab keeps throwaway storage when no client reported profiles", () =>
+it.live("an agent uses the persistent default before any client reports profiles", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      yield* ready;
-      expect(contextRequests).toEqual([{ profileId: "default", isolated: true }]);
+      const { broker, tabId } = yield* ready;
+      expect(contextRequests).toEqual([{ profileId: "default", isolated: false }]);
+      const status = yield* broker.invoke<PreviewAutomationStatus>({
+        scope,
+        tabId,
+        operation: "status",
+        input: {},
+      });
+      expect(status.defaultProfileId).toBe("default");
+      expect(status.tabs).toEqual([expect.objectContaining({ tabId, profileId: "default" })]);
+    }),
+  ).pipe(Effect.provide(layer)),
+);
+
+it.live("clients reconnect to the same server page while the agent runs without viewers", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { browser, broker, tabId } = yield* ready;
+      const status = () =>
+        broker.invoke<PreviewAutomationStatus>({
+          scope,
+          tabId,
+          operation: "status",
+          input: {},
+        });
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* browser.attachViewer(viewerInput(tabId, true));
+          yield* browser.attachViewer(viewerInput(tabId, true));
+          expect((yield* status()).visible).toBe(true);
+          expect(contexts).toHaveLength(1);
+        }),
+      );
+      expect((yield* status()).visible).toBe(false);
+      yield* broker.invoke({
+        scope,
+        tabId,
+        operation: "navigate",
+        input: { url: "https://example.com/still-running", readiness: "none" },
+      });
+      yield* browser.attachViewer(viewerInput(tabId, true));
+      expect((yield* status()).url).toBe("https://example.com/still-running");
+      expect(contexts).toHaveLength(1);
+      expect(contexts[0]!.page.close).not.toHaveBeenCalled();
+      expect(contextRequests).toEqual([{ profileId: "default", isolated: false }]);
     }),
   ).pipe(Effect.provide(layer)),
 );

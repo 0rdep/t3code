@@ -2,13 +2,10 @@
 // Screencasts ignore emulated device scale; real 2x keeps captures sharp.
 // --disable-gpu uses cheaper software compositing while preserving SwiftShader WebGL.
 import {
-  BUILT_IN_BROWSER_PROFILES,
   DEFAULT_BROWSER_PROFILE_ID,
   FILL_PREVIEW_VIEWPORT,
   findBrowserProfile,
   INCOGNITO_BROWSER_PROFILE_ID,
-  resolveBrowserProfiles,
-  type BrowserProfile,
   type PreviewReportProfilesInput,
   PREVIEW_AUTOMATION_SERVER_OPERATIONS,
   PreviewViewportSetting as PreviewViewportSettingSchema,
@@ -75,6 +72,7 @@ import { resolveRootCliCommand } from "../cli/invocation.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as PreviewAutomationBroker from "../mcp/PreviewAutomationBroker.ts";
 import * as DesktopBrowserChannel from "./DesktopBrowserChannel.ts";
+import * as BrowserProfiles from "./BrowserProfiles.ts";
 import * as PreviewManager from "./Manager.ts";
 import * as ServerBrowserPage from "./ServerBrowserPage.ts";
 import * as PreviewBrowser from "./PreviewBrowser.ts";
@@ -246,7 +244,7 @@ export class ServerBrowser extends Context.Service<
     /** Deletes a human profile's server-side storage, closing its open tabs first. */
     readonly clearProfile: (profileId: string) => Effect.Effect<void, PreviewClearProfileError>;
     /**
-     * Records a client's browser profiles for agents' preview_open. In memory:
+     * Records a client's browser profiles for agents' preview_open. Persisted:
      * clients report again on connect and whenever the list changes.
      */
     readonly reportProfiles: (input: PreviewReportProfilesInput) => Effect.Effect<void>;
@@ -482,6 +480,9 @@ const make = Effect.gen(function* () {
   const environment = yield* ServerEnvironment.ServerEnvironment;
   const previewBrowser = yield* PreviewBrowser.PreviewBrowser;
   const desktopChannel = yield* DesktopBrowserChannel.DesktopBrowserChannel;
+  const browserProfiles = yield* BrowserProfiles.make(
+    NodePath.join(config.stateDir, "server-browser", "profiles.json"),
+  );
   const runFork = Effect.runForkWith(yield* Effect.context<never>());
   const launchServices = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
   // The fix every host error names, rendered for how this server was launched.
@@ -749,17 +750,17 @@ const make = Effect.gen(function* () {
       adopted === undefined && (await desktopRenders(snapshot))
         ? await connectDesktop(snapshot)
         : null;
-    // An agent tab without a profile (no client reported one) keeps throwaway storage.
+    // Only explicit incognito tabs are temporary. Background agents must reuse
+    // the same persistent default profile even before a client connects.
     const isolatedContext =
       adopted === undefined &&
       desktop === null &&
-      ((snapshot.automationOwner !== undefined && snapshot.profileId === undefined) ||
-        snapshot.profileId === INCOGNITO_BROWSER_PROFILE_ID);
+      snapshot.profileId === INCOGNITO_BROWSER_PROFILE_ID;
     const context =
       adopted?.page.context() ??
       desktop?.page.context() ??
       (await contexts.contextFor(
-        snapshot.profileId ?? "default",
+        snapshot.profileId ?? DEFAULT_BROWSER_PROFILE_ID,
         isolatedContext ? tabKey(snapshot.threadId, snapshot.tabId) : undefined,
       ));
     if (adopted?.page.isClosed()) throw new Error("The popup closed before it opened.");
@@ -1267,38 +1268,24 @@ const make = Effect.gen(function* () {
         ? ("agent" as const)
         : ("unclaimed" as const);
 
-  /** The latest profile list a client reported; agents choose from it. */
-  let reportedProfiles: {
-    readonly profiles: ReadonlyArray<BrowserProfile>;
-    readonly defaultProfileId: string;
-  } | null = null;
-
-  const reportProfiles: ServerBrowser["Service"]["reportProfiles"] = (input) =>
-    Effect.sync(() => {
-      const profiles = resolveBrowserProfiles(input.profiles);
-      reportedProfiles = {
-        profiles,
-        defaultProfileId:
-          findBrowserProfile(profiles, input.defaultProfileId)?.id ?? DEFAULT_BROWSER_PROFILE_ID,
-      };
-    });
+  const reportProfiles = browserProfiles.report;
 
   const profileStatus = () => {
-    const profiles = reportedProfiles?.profiles ?? BUILT_IN_BROWSER_PROFILES;
+    const { profiles, defaultProfileId } = browserProfiles.get();
     return {
       profiles: profiles.map((profile) => ({
         id: profile.id,
         name: profile.name,
         ...(profile.kind === "incognito" ? { incognito: true } : {}),
       })),
-      ...(reportedProfiles ? { defaultProfileId: reportedProfiles.defaultProfileId } : {}),
+      defaultProfileId,
     };
   };
 
   /** Matches an id, then a case-insensitive name. Omitted means the reported default. */
   const resolveOpenProfile = (requested: string | undefined): string | undefined => {
-    if (requested === undefined) return reportedProfiles?.defaultProfileId;
-    const profiles = reportedProfiles?.profiles ?? BUILT_IN_BROWSER_PROFILES;
+    const { profiles, defaultProfileId } = browserProfiles.get();
+    if (requested === undefined) return defaultProfileId;
     const wanted = requested.toLowerCase();
     const match =
       findBrowserProfile(profiles, requested) ??

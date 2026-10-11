@@ -224,6 +224,17 @@ export function readEnvironmentSupportsServerBrowser(environmentId: EnvironmentI
   );
 }
 
+export function useEnvironmentSupportsDesktopBrowser(environmentId: EnvironmentId): boolean {
+  return useServerConfigs().get(environmentId)?.environment.capabilities.desktopBrowser === true;
+}
+
+export function readEnvironmentSupportsDesktopBrowser(environmentId: EnvironmentId): boolean {
+  return (
+    appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities
+      .desktopBrowser === true
+  );
+}
+
 export function readEnvironmentSupportsTitleRegeneration(environmentId: EnvironmentId): boolean {
   return (
     appAtomRegistry.get(environmentServerConfigsAtom).get(environmentId)?.environment.capabilities

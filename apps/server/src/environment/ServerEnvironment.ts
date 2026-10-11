@@ -217,6 +217,9 @@ export const make = Effect.gen(function* () {
     orchestrationProtocolVersion: ORCHESTRATION_PROTOCOL_VERSION,
     capabilities: {
       repositoryIdentity: true,
+      desktopBrowser:
+        serverConfig.desktopBrowserFd !== undefined &&
+        serverConfig.desktopBrowserControlFd !== undefined,
       connectionProbe: true,
       attachmentUploads: true,
       questionAttachments: true,

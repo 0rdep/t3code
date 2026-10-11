@@ -190,12 +190,20 @@ directly. Every other device, and the desktop app for other environments,
 streams them from the host. Agents keep using them while no device is
 connected, and `localhost` addresses reach servers on the host.
 
+In Windows desktop's WSL-only mode, tabs also stream from the WSL server.
+Sign in inside that browser once to share the session with agents and other
+devices connected to the same environment. Existing Windows browser logins
+are not copied into WSL.
+
 The first tab downloads a headless Chrome, about 120 MB, into the T3 home. It
 is the same browser [HTML renders](html-renders.md) use, so a host downloads it
 only once. Some Linux hosts need [setup](#browser-host-setup) before it can
 start.
 
-Agent tabs have separate storage and share a Chromium process. Take control before
+Agent tabs use the selected browser profile, or the default profile when none is
+specified. Server-side profiles retain cookies and site storage across tab and
+server restarts; Incognito is temporary. The server remembers the last reported
+profile list and default even while no client is connected. Take control before
 typing into an agent's tab, then release control when you want the agent to
 continue. Read-only connections can watch without changing the page.
 
