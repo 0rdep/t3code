@@ -3,28 +3,21 @@ import type { EnvironmentId, PreviewRuntime, PreviewSessionSnapshot } from "@t3t
 
 import { isElectron } from "~/env";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 import {
+  readEnvironmentSupportsDesktopBrowser,
   readEnvironmentSupportsServerBrowser,
+  useEnvironmentSupportsDesktopBrowser,
   useEnvironmentSupportsServerBrowser,
 } from "~/state/entities";
 
 /**
- * Where a tab the user opens should run. The desktop app draws its own
- * server's tabs natively, so those stay agent-drivable at no cost. A remote
- * environment's tabs would stream, so the desktop opens them in its own
- * browser instead: no latency, and it reaches what this computer reaches. The
- * user can move a tab to the environment when only it can reach the page.
+ * Open in the environment's browser when available, so people and agents on
+ * different clients share its page and saved logins. A desktop-only tab is
+ * still available through the explicit move action.
  */
 export function previewRuntimeFor(environmentId: EnvironmentId): PreviewRuntime | undefined {
   if (!readEnvironmentSupportsServerBrowser(environmentId)) return undefined;
-  if (
-    isPreviewSupportedInRuntime() &&
-    environmentId !== appAtomRegistry.get(primaryEnvironmentIdAtom)
-  ) {
-    return undefined;
-  }
   return "server";
 }
 
@@ -62,12 +55,14 @@ export function rendersServerTabNatively(
   environmentId: EnvironmentId,
   primaryEnvironmentId: EnvironmentId | null,
   snapshot: Pick<PreviewSessionSnapshot, "runtime"> | null | undefined,
+  desktopBrowser = readEnvironmentSupportsDesktopBrowser(environmentId),
 ): boolean {
   return (
     isElectron &&
     snapshot?.runtime === "server" &&
     primaryEnvironmentId !== null &&
-    environmentId === primaryEnvironmentId
+    environmentId === primaryEnvironmentId &&
+    desktopBrowser
   );
 }
 
@@ -75,5 +70,7 @@ export function useRendersServerTabNatively(
   environmentId: EnvironmentId,
   snapshot: Pick<PreviewSessionSnapshot, "runtime"> | null | undefined,
 ): boolean {
-  return rendersServerTabNatively(environmentId, useAtomValue(primaryEnvironmentIdAtom), snapshot);
+  const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
+  const desktopBrowser = useEnvironmentSupportsDesktopBrowser(environmentId);
+  return rendersServerTabNatively(environmentId, primaryEnvironmentId, snapshot, desktopBrowser);
 }

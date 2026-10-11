@@ -89,7 +89,7 @@ describe("ServerBrowserContexts", () => {
     for (const context of browser.contexts) expect(context.close).toHaveBeenCalled();
   });
 
-  it("keeps human profiles persistent without sharing their storage with agents", async () => {
+  it("keeps profile storage persistent unless isolation is explicitly requested", async () => {
     const human = makeContext();
     const browser = makeBrowser();
     launches.persistent.mockResolvedValue(human as unknown as BrowserContext);
@@ -105,6 +105,15 @@ describe("ServerBrowserContexts", () => {
     expect(launches.mkdir).toHaveBeenCalledWith("/test/profiles/work%2Fteam", { recursive: true });
     await pool.close();
     expect(human.close).toHaveBeenCalledTimes(1);
+    const restarted = new ServerBrowserContexts(options());
+    launches.persistent.mockResolvedValue(makeContext() as unknown as BrowserContext);
+    await restarted.contextFor("work/team");
+    expect(launches.persistent).toHaveBeenLastCalledWith(
+      "/test/profiles/work%2Fteam",
+      expect.objectContaining({ chromiumSandbox: true, executablePath: "/test/chromium" }),
+    );
+    expect(launches.rm).not.toHaveBeenCalled();
+    await restarted.close();
   });
 
   it("clears a profile by closing its open context before deleting its storage", async () => {

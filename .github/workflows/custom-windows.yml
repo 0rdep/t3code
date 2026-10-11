@@ -1,0 +1,195 @@
+name: Custom Windows + WSL
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: custom-windows-release
+  cancel-in-progress: false
+
+env:
+  T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+
+jobs:
+  linux-runtime:
+    if: github.repository == '0rdep/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      artifact_id: ${{ steps.archive.outputs.artifact-id }}
+    steps:
+      # Avoid checkout's submodule cleanup on the upstream orphaned .repos gitlinks.
+      - name: Checkout source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: false
+          run-install: false
+      - name: Install dependencies
+        run: vp install --frozen-lockfile --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
+      - name: Resolve custom nightly version
+        id: version
+        shell: bash
+        run: |
+          node scripts/resolve-nightly-release.ts --date "$(date -u +%Y%m%d)" \
+            --run-number "$((GITHUB_RUN_ID * 100 + GITHUB_RUN_ATTEMPT))" \
+            --sha "$GITHUB_SHA" --github-output
+      - name: Verify browser fixes
+        run: vp test run apps/web/src/browser/previewRuntime.test.ts apps/server/src/preview/BrowserProfiles.test.ts apps/server/src/preview/ServerBrowser.test.ts apps/server/src/preview/ServerBrowserContexts.test.ts apps/server/src/environment/ServerEnvironment.test.ts
+      - name: Set package versions
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/update-release-package-versions.ts "$VERSION"
+      - name: Build server and web client
+        run: vp run --filter t3 build
+      - name: Build Linux executable
+        shell: bash
+        run: |
+          sea_node=$(sed -n 's/^const SEA_NODE_VERSION = "\([^"]*\)";.*/\1/p' apps/server/vite.config.ts)
+          test -n "$sea_node"
+          vp env install "$sea_node"
+          VP_NODE_VERSION="$sea_node" node apps/server/scripts/cli.ts build-exe --verbose
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+      - name: Build Linux resource monitor
+        shell: bash
+        run: |
+          cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml --target x86_64-unknown-linux-gnu
+          mkdir -p "$RUNNER_TEMP/resource-monitor"
+          cp native/resource-monitor/target/x86_64-unknown-linux-gnu/release/t3-resource-monitor "$RUNNER_TEMP/resource-monitor/"
+      - name: Package matching WSL runtime
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/build-cli-archive.ts --platform linux --arch x64 --version "$VERSION" --resource-monitor-dir "$RUNNER_TEMP/resource-monitor" --output-dir release
+      - name: Pass runtime to Windows
+        id: archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: custom-wsl-runtime
+          path: release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  windows-installer:
+    needs: linux-runtime
+    runs-on: windows-2022
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: write
+    env:
+      VERSION: ${{ needs.linux-runtime.outputs.version }}
+      RELEASE_TAG: ${{ needs.linux-runtime.outputs.tag }}
+    steps:
+      - name: Checkout the same source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git -c checkout.workers=0 checkout --detach FETCH_HEAD
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: false
+          run-install: false
+      - name: Install dependencies
+        run: vp install --frozen-lockfile --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+      - name: Install Spectre-mitigated MSVC libraries
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -products * -latest -property installationPath
+          $setup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $process = Start-Process $setup -Wait -PassThru -NoNewWindow -ArgumentList @(
+            'modify', '--installPath', "`"$installPath`"", '--add',
+            'Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre', '--quiet', '--norestart'
+          )
+          if ($process.ExitCode -notin @(0, 3010)) { throw "Visual Studio setup failed: $($process.ExitCode)" }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: custom-wsl-runtime
+          path: release
+      - name: Set matching package versions
+        run: node scripts/update-release-package-versions.ts "$env:VERSION"
+      - name: Build Windows installer with fork update feed
+        shell: pwsh
+        run: |
+          $runtime = (Get-ChildItem release -Filter '*.tar.gz').FullName
+          vp run dist:desktop:win:x64 --build-version $env:VERSION --wsl-runtime $runtime --output-dir release --keep-stage --verbose
+          if ($LASTEXITCODE -ne 0) { throw 'Windows packaging failed' }
+      - name: Verify update feed and prepare release assets
+        shell: pwsh
+        run: |
+          $stage = Get-ChildItem ([IO.Path]::GetTempPath()) -Directory -Filter 't3code-desktop-win-stage-*' | Select-Object -Last 1
+          $configPath = Join-Path $stage.FullName 'app\dist\win-unpacked\resources\app-update.yml'
+          $config = Get-Content $configPath -Raw
+          $owner, $repo = $env:GITHUB_REPOSITORY.Split('/')
+          if ($config -notmatch "(?m)^owner: $([regex]::Escape($owner))\s*$" -or
+              $config -notmatch "(?m)^repo: $([regex]::Escape($repo))\s*$") {
+            throw 'Packaged app does not use this fork for updates'
+          }
+          Copy-Item $configPath release/app-update.yml
+          foreach ($pattern in @('*.exe', '*.blockmap', 'nightly.yml')) {
+            if (-not (Get-ChildItem release -Filter $pattern)) { throw "Missing update asset: $pattern" }
+          }
+          @{
+            version = $env:VERSION; commit = $env:GITHUB_SHA; signed = $false
+            repository = $env:GITHUB_REPOSITORY; tag = $env:RELEASE_TAG
+            run = $env:GITHUB_RUN_ID; attempt = $env:GITHUB_RUN_ATTEMPT
+          } | ConvertTo-Json | Set-Content release/BUILD-INFO.json -Encoding utf8
+          $assets = Get-ChildItem release -File | Where-Object {
+            $_.Name -match '\.(exe|blockmap|tar\.gz)$' -or
+            $_.Name -in @('nightly.yml', 'BUILD-INFO.json', 'app-update.yml')
+          }
+          $assets | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)"
+          } | Set-Content release/SHA256SUMS -Encoding utf8
+      - name: Publish complete release to the fork
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          @"
+          Custom Windows x64 build with the matching Linux WSL runtime.
+          Updates come from $env:GITHUB_REPOSITORY, not pingdotgg/t3code.
+          Commit: $env:GITHUB_SHA
+          Build run: $env:GITHUB_RUN_ID; attempt: $env:GITHUB_RUN_ATTEMPT
+          Unsigned installer: Windows may show a SmartScreen warning.
+          "@ | Set-Content release-notes.md -Encoding utf8
+          $assets = Get-ChildItem release -File | Where-Object {
+            $_.Name -match '\.(exe|blockmap|tar\.gz)$' -or
+            $_.Name -in @('nightly.yml', 'BUILD-INFO.json', 'app-update.yml', 'SHA256SUMS')
+          } | ForEach-Object { $_.FullName }
+          gh release create $env:RELEASE_TAG @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --draft --prerelease --latest=false --title "T3 Code Custom $env:VERSION" --notes-file release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+          gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+      - name: Remove temporary runtime artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.linux-runtime.outputs.artifact_id }}
+        run: gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:ARTIFACT_ID"

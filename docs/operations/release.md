@@ -413,6 +413,39 @@ available.
   - `electron-updater` reads `latest-mac.yml` on stable and `nightly-mac.yml` on nightly, for both Intel and Apple Silicon.
   - The workflow merges the per-arch mac manifests into one channel-specific mac manifest before publishing the GitHub Release.
 
+### Custom Windows builds from this fork
+
+`.github/workflows/custom-windows.yml` builds Windows x64 and its matching Linux
+WSL runtime on standard GitHub-hosted runners. Updating this fork's `main` branch
+starts a build, runs the browser regression tests, and publishes an unsigned nightly
+prerelease to this fork. Feature branches do not publish builds, and this workflow
+has no scheduled trigger. Direct pushes to `main` also trigger a build. It does not
+publish npm packages or merge upstream changes.
+
+After merging and pushing to `main`, download the installer from WSL on that branch:
+
+```sh
+bash scripts/package-custom-windows.sh
+```
+
+The helper waits for the current commit's build, verifies the installer checksum,
+and saves it under Windows Downloads in `T3Code-Custom/<release-tag>/`. Pass
+`--rebuild` to rebuild the same commit or `--output <directory>` to change the
+destination. Building and downloading do not install or launch the application.
+
+Install the unsigned nightly manually once; Windows may show a SmartScreen warning.
+Its update feed points to this fork, not upstream. Keep the app's update channel on
+Nightly. Subsequent published builds appear in the usual update UI; downloading and
+restarting to install still require confirmation. Only the bundled Windows/WSL
+backend is covered: independently installed remote servers cannot use npm to update
+to these unpublished custom versions. Browser logins stay in the server's existing
+T3 home across updates. Existing Windows browser cookies are not migrated to WSL.
+
+To incorporate a newer upstream nightly, merge upstream into `main`, resolve conflicts,
+then push. This deliberately requires review rather than silently
+dropping the browser fixes. The workflow retains intermediate artifacts for one day
+and removes them after successful publication; final installers live in Releases.
+
 ### Windows payload topology and update validation
 
 Windows packages the bundled server and only its runtime-external/native

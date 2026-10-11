@@ -12,6 +12,7 @@ import { useClientSettingsHydrated } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
 import { useActivePreviewSessions } from "~/previewStateStore";
 import { previewEnvironment } from "~/state/preview";
+import { useServerConfigs } from "~/state/entities";
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 
@@ -27,6 +28,7 @@ export function ElectronBrowserHost() {
   const { resolvedTheme } = useTheme();
   const previewByThreadKey = useActivePreviewSessions();
   const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
+  const serverConfigs = useServerConfigs();
   const sessions = useMemo(
     () =>
       Object.entries(previewByThreadKey).flatMap(([threadKey, previewState]) => {
@@ -37,7 +39,13 @@ export function ElectronBrowserHost() {
               .filter(
                 (snapshot) =>
                   snapshot.runtime !== "server" ||
-                  rendersServerTabNatively(threadRef.environmentId, primaryEnvironmentId, snapshot),
+                  rendersServerTabNatively(
+                    threadRef.environmentId,
+                    primaryEnvironmentId,
+                    snapshot,
+                    serverConfigs.get(threadRef.environmentId)?.environment.capabilities
+                      .desktopBrowser === true,
+                  ),
               )
               .map((snapshot) => ({
                 threadRef,
@@ -53,7 +61,7 @@ export function ElectronBrowserHost() {
               }))
           : [];
       }),
-    [previewByThreadKey, primaryEnvironmentId],
+    [previewByThreadKey, primaryEnvironmentId, serverConfigs],
   );
 
   useEffect(() => {
