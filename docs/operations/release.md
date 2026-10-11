@@ -416,11 +416,13 @@ available.
 ### Custom Windows builds from this fork
 
 `.github/workflows/custom-windows.yml` builds Windows x64 and its matching Linux
-WSL runtime on standard GitHub-hosted runners. Pushing `fix/shared-browser-sessions`
+WSL runtime on standard GitHub-hosted runners. Updating this fork's `main` branch
 starts a build, runs the browser regression tests, and publishes an unsigned nightly
-prerelease to this fork. It does not publish npm packages or merge upstream changes.
+prerelease to this fork. Feature branches do not publish builds, and this workflow
+has no scheduled trigger. Direct pushes to `main` also trigger a build. It does not
+publish npm packages or merge upstream changes.
 
-After committing and pushing, download the installer from WSL:
+After merging and pushing to `main`, download the installer from WSL on that branch:
 
 ```sh
 bash scripts/package-custom-windows.sh
@@ -439,8 +441,8 @@ backend is covered: independently installed remote servers cannot use npm to upd
 to these unpublished custom versions. Browser logins stay in the server's existing
 T3 home across updates. Existing Windows browser cookies are not migrated to WSL.
 
-To incorporate a newer upstream nightly, merge or rebase upstream into the fix branch,
-resolve conflicts, then push. This deliberately requires review rather than silently
+To incorporate a newer upstream nightly, merge upstream into `main`, resolve conflicts,
+then push. This deliberately requires review rather than silently
 dropping the browser fixes. The workflow retains intermediate artifacts for one day
 and removes them after successful publication; final installers live in Releases.
 

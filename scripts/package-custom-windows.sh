@@ -29,14 +29,15 @@ if [[ -n $(git status --porcelain) ]]; then
   echo 'Commit and push your changes before building; GitHub cannot see local edits.' >&2
   exit 1
 fi
-repository=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+repository=$(gh repo view "$(git remote get-url origin)" --json nameWithOwner --jq .nameWithOwner)
 branch=$(git branch --show-current)
+[[ $branch == main ]] || { echo 'Switch to main to download a published build; feature branches do not publish releases.' >&2; exit 1; }
 commit=$(git rev-parse HEAD)
 remote_commit=$(gh api "repos/$repository/git/ref/heads/$branch" --jq .object.sha)
 [[ $commit == "$remote_commit" ]] || { echo 'Push this branch before building.' >&2; exit 1; }
 run=$(gh run list --repo "$repository" --workflow custom-windows.yml --commit "$commit" \
   --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-[[ -n $run ]] || { echo 'No build found yet. Pushing fix/shared-browser-sessions starts one.' >&2; exit 1; }
+[[ -n $run ]] || { echo 'No build found yet. Updating the fork’s main branch starts one.' >&2; exit 1; }
 if $rebuild; then gh run rerun "$run" --repo "$repository"; fi
 gh run watch "$run" --repo "$repository" --exit-status
 attempt=$(gh api "repos/$repository/actions/runs/$run" --jq .run_attempt)

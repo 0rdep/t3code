@@ -2,8 +2,7 @@ name: Custom Windows + WSL
 
 on:
   push:
-    branches: [fix/shared-browser-sessions]
-  workflow_dispatch:
+    branches: [main]
 
 permissions:
   contents: read
