@@ -73,6 +73,7 @@ import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as PreviewAutomationBroker from "../mcp/PreviewAutomationBroker.ts";
 import * as DesktopBrowserChannel from "./DesktopBrowserChannel.ts";
 import * as BrowserProfiles from "./BrowserProfiles.ts";
+import { disableServerPasskeys } from "@t3tools/shared/serverPasskeys";
 import * as PreviewManager from "./Manager.ts";
 import * as ServerBrowserPage from "./ServerBrowserPage.ts";
 import * as PreviewBrowser from "./PreviewBrowser.ts";
@@ -1140,6 +1141,9 @@ const make = Effect.gen(function* () {
       controller.push({ _tag: "clipboard", text: text.slice(0, CLIPBOARD_TEXT_LIMIT) });
     });
     await context.addInitScript(CLIPBOARD_SCRIPT);
+    // The headless host cannot use a viewer's authenticator. Reject promptly
+    // instead of waiting on a Chromium prompt nobody can see.
+    await context.addInitScript(disableServerPasskeys);
   };
 
   const adoptPopup = async (opener: ServerTab, popup: Page) => {

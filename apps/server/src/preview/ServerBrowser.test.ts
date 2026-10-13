@@ -1,6 +1,7 @@
 import * as NodeEvents from "node:events";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { disableServerPasskeys } from "@t3tools/shared/serverPasskeys";
 import { it } from "@effect/vitest";
 import {
   EnvironmentId,
@@ -266,6 +267,16 @@ const viewerInput = (tabId: string, canOperate: boolean) => ({
   maxHeight: 800,
   quality: 70,
 });
+
+it.live("disables passkeys in the headless context before a page navigates", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      yield* ready;
+      expect(contexts[0]!.addInitScript).toHaveBeenCalledWith(disableServerPasskeys);
+      expect(contexts[0]!.page.goto).not.toHaveBeenCalled();
+    }),
+  ).pipe(Effect.provide(layer)),
+);
 
 beforeEach(() => {
   contexts.length = 0;
@@ -1326,6 +1337,7 @@ it.live("drives the desktop's own page for a tab the desktop renders", () =>
       // No headless context was launched for it.
       expect(contexts).toEqual([]);
       const page = desktopConnections[0]!.context.page;
+      expect(desktopConnections[0]!.context.addInitScript).not.toHaveBeenCalled();
       // The desktop panel sizes its page, so a viewer resize leaves it alone.
       yield* viewer.input({ type: "takeControl" });
       yield* viewer.input({ type: "resize", width: 390, height: 844 });

@@ -195,6 +195,12 @@ Sign in inside that browser once to share the session with agents and other
 devices connected to the same environment. Existing Windows browser logins
 are not copied into WSL.
 
+Passkeys are not supported in the shared server browser, including Windows Hello
+from WSL. Passkey requests return an unsupported error without opening a T3 Code
+dialog. Choose another sign-in method to keep the login shared with agents, or use
+**Open on this computer** for native passkey support. A login in the native browser
+does not transfer to the shared server browser.
+
 The first tab downloads a headless Chrome, about 120 MB, into the T3 home. It
 is the same browser [HTML renders](html-renders.md) use, so a host downloads it
 only once. Some Linux hosts need [setup](#browser-host-setup) before it can

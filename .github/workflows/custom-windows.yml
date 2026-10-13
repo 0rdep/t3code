@@ -49,7 +49,15 @@ jobs:
             --run-number "$((GITHUB_RUN_ID * 100 + GITHUB_RUN_ATTEMPT))" \
             --sha "$GITHUB_SHA" --github-output
       - name: Verify browser fixes
-        run: vp test run apps/web/src/browser/previewRuntime.test.ts apps/server/src/preview/BrowserProfiles.test.ts apps/server/src/preview/ServerBrowser.test.ts apps/server/src/preview/ServerBrowserContexts.test.ts apps/server/src/environment/ServerEnvironment.test.ts
+        run: >-
+          vp test run apps/web/src/browser/previewRuntime.test.ts
+          apps/server/src/preview/BrowserProfiles.test.ts
+          apps/server/src/preview/ServerBrowser.test.ts
+          apps/server/src/preview/ServerBrowserContexts.test.ts
+          apps/server/src/preview/ServerBrowserStream.test.ts
+          apps/server/src/environment/ServerEnvironment.test.ts
+          packages/shared/src/serverPasskeys.test.ts
+          packages/client-runtime/src/preview/serverBrowserStream.test.ts
       - name: Set package versions
         env:
           VERSION: ${{ steps.version.outputs.version }}
